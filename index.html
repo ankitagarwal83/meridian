@@ -766,12 +766,14 @@ if(isConfigured){ try{ sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANO
 // ── Claude API helper ─────────────────────────────────────────────────
 // Routes through Netlify function when deployed, direct API call when local
 const ANTHROPIC_KEY_LOCAL = "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";
-const CLOUDFLARE_WORKER_URL = 'https://meridian-email.YOUR-NAME.workers.dev'; // ← UPDATE with your Cloudflare Worker URL
+const CLOUDFLARE_WORKER_URL = 'https://meridian-email.ankit-agarwal83.workers.dev'; // ← UPDATE with your Cloudflare Worker URL
 
 async function callClaude(payload){
-  // On localhost/file: call Anthropic directly
-  // On hosted domain: route through Cloudflare Worker proxy (avoids CORS)
   const isLocal = location.protocol==='file:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  // Check if Cloudflare Worker URL has been configured
+  if(!isLocal && CLOUDFLARE_WORKER_URL.includes('YOUR-NAME')){
+    throw new Error('Cloudflare Worker URL not configured. Open index.html and replace YOUR-NAME in CLOUDFLARE_WORKER_URL with your actual Cloudflare username.');
+  }
   const url = isLocal
     ? 'https://api.anthropic.com/v1/messages'
     : CLOUDFLARE_WORKER_URL + '/claude';
@@ -1014,10 +1016,14 @@ async function loadSummaryFor(co){
     }catch(e){ parsed=null; }
     summaries[co]=parsed||{summary:raw,metrics:[],bull:'',bear:'',risks:''};
     if(sb)await sb.from('summaries').upsert({company:co,summary:JSON.stringify(summaries[co]),updated_at:new Date().toISOString()});
-  }catch(e){console.error(e);delete summaries[co];}
+  }catch(e){
+    console.error('AI Summary error:',e);
+    delete summaries[co];
+    showToast('AI Summary failed: ' + e.message, 6000);
+  }
   if(selectedCo===co&&currentView==='companies'){
     const el=$('ai-content');
-    if(el) el.innerHTML=summaries[co]?renderSummaryCard(summaries[co]):'<div style="color:var(--text3);font-size:12px">Could not generate summary.</div>';
+    if(el) el.innerHTML=summaries[co]?renderSummaryCard(summaries[co]):'<div style="color:var(--text3);font-size:12px">Could not generate summary — check console for details.</div>';
   }
 }
 
@@ -2261,6 +2267,12 @@ $('merge-target-name').addEventListener('input', updateMergePreview);
 $('merge-target-name').addEventListener('change', updateMergePreview);
 
 // ── App startup ────────────────────────────────────────────
+// Warn if Cloudflare Worker URL not configured
+if(location.hostname !== 'localhost' && location.protocol !== 'file:' && CLOUDFLARE_WORKER_URL.includes('YOUR-NAME')){
+  setTimeout(function(){
+    showToast('⚠️ AI features disabled: update CLOUDFLARE_WORKER_URL in index.html with your worker URL', 8000);
+  }, 2000);
+}
 try{
   const d=$('f-date');
   if(d) d.value=new Date().toISOString().split('T')[0];
